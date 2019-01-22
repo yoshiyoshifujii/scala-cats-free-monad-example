@@ -67,6 +67,28 @@ class StudyYourGrammar extends FreeSpec {
         program.foldMap(impureCompiler) === Some(14)
       }
     }
+
+    "Use a pure compiler (optional)" in {
+      import cats.data.State
+      import cats.~>
+
+      type KVStoreState[A] = State[Map[String, Any], A]
+
+      def pureCompiler: KVStore ~> KVStoreState =
+        new (KVStore ~> KVStoreState) {
+          override def apply[A](fa: KVStore[A]): KVStoreState[A] =
+            fa match {
+              case Put(key, value) =>
+                State.modify[Map[String, Any]](_.updated(key, value)).asInstanceOf[KVStoreState[A]]
+              case Get(key)    => State.inspect[Map[String, Any], Any](_.get(key)).asInstanceOf[KVStoreState[A]]
+              case Delete(key) => State.modify[Map[String, Any]](_ - key).asInstanceOf[KVStoreState[A]]
+            }
+        }
+
+      assert {
+        program.foldMap(pureCompiler).run(Map.empty).value._2 === Some(14)
+      }
+    }
   }
 
 }
